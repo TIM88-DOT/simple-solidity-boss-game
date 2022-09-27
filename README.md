@@ -1,2 +1,2 @@
-# simple solidity boss game 
+# dumb boss game on solidity
  
