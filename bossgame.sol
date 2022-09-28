@@ -8,7 +8,9 @@ pragma solidity ^0.8.9;
 
 contract bossGame is Ownable {
     address[] players;
+
     bool contributionPeriodOn;
+    bool bossDefeated;
 
     uint256 public randNonce = 0;
     uint256 public playersCount;
@@ -52,7 +54,8 @@ contract bossGame is Ownable {
     }
 
     function claimWin() public {
-        require(lastRound[msg.sender] < round_id, "Already Claimed");
+        require(bossDefeated == true,"You didn't beat the boss ser");
+        require(lastRound[msg.sender] < round_id, "Already claimed");
         lastRound[msg.sender] = round_id;
         uint256 amount = calculatePlayerShare(msg.sender);
         (bool success, ) = msg.sender.call{value: amount}("");
@@ -78,10 +81,12 @@ contract bossGame is Ownable {
         uint256 bossHp = _totalcontributed**(1 + (randMod() / 10));
         uint256 totalDmg = _totalcontributed**(1 + (randMod() / 10));
         if (totalDmg >= bossHp) {
+            bossDefeated = true;
             emit fightWon(true);
             reset();
         } else {
             //refund
+            bossDefeated = false;
             emit fightWon(false);
             payable(players[i]).transfer(_totalcontributed);
             reset();
