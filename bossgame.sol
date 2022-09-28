@@ -14,7 +14,7 @@ contract bossGame is Ownable {
     uint256 public randNonce = 0;
     uint256 public playersCount;
     uint256 public MAX_PLAYERS = 30;
-    uint256 public cycling_round;
+    uint256 public round_id = 0;
 
     uint256 private startTime;
     uint256 private _minDeposit = 0.01 ether;
@@ -24,6 +24,7 @@ contract bossGame is Ownable {
 
     mapping(address => uint256) playerDeposit;
     mapping(address => bool) isPlayer;
+    mapping(address => uint256) public lastRound;
 
     event ContributionPeriodFinished(bool state);
     event fightWon(bool state);
@@ -34,7 +35,7 @@ contract bossGame is Ownable {
         require(MAX_PLAYERS >= playersCount, "Max players amount reached");
         require(msg.value >= _minDeposit && playerDeposit[msg.sender] + msg.value <= _maxDeposit, "Unsupported deposit amount"
         );
-        if ((block.timestamp - startTime) < 120) {
+        if ((block.timestamp - startTime) < 3600) {
             if (!isPlayer[msg.sender]) {
                 isPlayer[msg.sender] = true;
                 players.push(msg.sender);
@@ -43,14 +44,14 @@ contract bossGame is Ownable {
             playerDeposit[msg.sender] += msg.value;
         } else {
             contributionPeriodOn = false;
-            emit ContributionPeriodFinished(contributionPeriodOn);
+            emit ContributionPeriodFinished(true);
             startFight();
         }
     }
 
-      function claimReward() public {
-        require(lastWithdrawCycle[_msgSender()] < cycling_round, "Already Claimed");
-        lastWithdrawCycle[_msgSender()] = cycling_round;
+      function claimWin() public {
+        require(lastRound[msg.sender] < round_id, "Already Claimed");
+        lastRound[msg.sender] = round_id;
         uint256 amount = calculatePlayerShare(msg.sender);
         (bool success, ) = msg.sender.call{value:amount}("");
         require(success, "Failed to send rewards");
@@ -61,6 +62,7 @@ contract bossGame is Ownable {
     function startContributionPeriod() public onlyOwner {
         contributionPeriodOn = true;
         startTime = block.timestamp;
+        round_id++;
     }
 
     // internal
@@ -76,10 +78,6 @@ contract bossGame is Ownable {
         uint totalDmg = _totalcontributed ** (1 + (randMod() / 10));
         if (totalDmg >= bossHp){
             emit fightWon(true);
-        uint amountEarned = calculatePlayerShare();
-        for (uint256 i = 0; i < players.length; i++) {
-            payable(players[i]).transfer(amountEarned);
-        }
         } else {
             //refund
             emit fightWon(false);
