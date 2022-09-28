@@ -1,2 +1,2 @@
-# dumb boss game on solidity
+# dumb RNG boss game on solidity
  
