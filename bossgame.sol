@@ -7,7 +7,6 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 pragma solidity ^0.8.9;
 
 contract bossGame is Ownable {
-
     address[] players;
     bool contributionPeriodOn;
 
@@ -33,7 +32,10 @@ contract bossGame is Ownable {
     function _Deposit() public payable {
         require(contributionPeriodOn, "Can't deposit now");
         require(MAX_PLAYERS >= playersCount, "Max players amount reached");
-        require(msg.value >= _minDeposit && playerDeposit[msg.sender] + msg.value <= _maxDeposit, "Unsupported deposit amount"
+        require(
+            msg.value >= _minDeposit &&
+                playerDeposit[msg.sender] + msg.value <= _maxDeposit,
+            "Unsupported deposit amount"
         );
         if ((block.timestamp - startTime) < 3600) {
             if (!isPlayer[msg.sender]) {
@@ -49,14 +51,13 @@ contract bossGame is Ownable {
         }
     }
 
-      function claimWin() public {
+    function claimWin() public {
         require(lastRound[msg.sender] < round_id, "Already Claimed");
         lastRound[msg.sender] = round_id;
         uint256 amount = calculatePlayerShare(msg.sender);
-        (bool success, ) = msg.sender.call{value:amount}("");
+        (bool success, ) = msg.sender.call{value: amount}("");
         require(success, "Failed to send rewards");
     }
-
 
     // owner
     function startContributionPeriod() public onlyOwner {
@@ -74,22 +75,36 @@ contract bossGame is Ownable {
             _totalcontributed += playerDeposit[p];
         }
         //to bechanged
-        uint bossHp = _totalcontributed ** (1 + (randMod() / 10));
-        uint totalDmg = _totalcontributed ** (1 + (randMod() / 10));
-        if (totalDmg >= bossHp){
+        uint256 bossHp = _totalcontributed**(1 + (randMod() / 10));
+        uint256 totalDmg = _totalcontributed**(1 + (randMod() / 10));
+        if (totalDmg >= bossHp) {
             emit fightWon(true);
+            reset();
         } else {
             //refund
             emit fightWon(false);
             payable(players[i]).transfer(_totalcontributed);
+            reset();
         }
-
     }
 
-    function calculatePlayerShare(address playerAddress) internal returns(uint256) {
+    function calculatePlayerShare(address playerAddress)
+        internal
+        returns (uint256)
+    {
         return (address(this).balance * 100) / playerDeposit[playerAddress];
     }
-    
+
+    function reset() internal {
+        for (uint256 i = 0; i < players.length; i++) {
+            address p = players[i];
+            isPlayer[p] = false;
+            playerDeposit[p] = 0;
+        }
+        players = [];
+        playersCount = 0;
+    }
+
     function randMod() internal returns (uint256) {
         randNonce++;
         return
@@ -109,11 +124,13 @@ contract bossGame is Ownable {
         return players;
     }
 
-    function getPlayerInfo(address playerAddress)public view returns (bool, uint256)
+    function getPlayerInfo(address playerAddress)
+        public
+        view
+        returns (bool, uint256)
     {
         return (isPlayer[playerAddress], playerDeposit[playerAddress]);
     }
-
 
     receive() external payable {}
 
