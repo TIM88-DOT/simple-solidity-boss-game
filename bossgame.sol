@@ -9,24 +9,32 @@ pragma solidity ^0.8.9;
 contract bossGame is Ownable {
     address[] players;
 
-    bool contributionPeriodOn;
-    bool bossDefeated;
+    struct BossFight {
+        uint256 round_id;
+        uint32 startTime;
+        uint256 totalcontributed;
+        bool bossDefeated;
+        uint256 victoryReward;
+    }
 
-    uint256 public randNonce = 0;
     uint256 public playersCount;
     uint256 public MAX_PLAYERS = 30;
-    uint256 public round_id = 0;
 
-    uint256 private startTime;
+    uint256 private randNonce = 0;
+    uint256 private count = 0;
     uint256 private _minDeposit = 0.01 ether;
     uint256 private _maxDeposit = 0.5 ether;
-    uint256 private _victoryReward;
-    uint256 private _totalcontributed = 0;
 
-    mapping(address => uint256) playerDeposit;
-    mapping(address => bool) isPlayer;
+    bool public contributionPeriodOn;
+
+    mapping(uint256 => BossFight) public bossFights;
+
+    mapping(uint256 => mapping(address => uint256)) public playerDeposit;
+    mapping(uint256 => mapping(address => bool)) public isPlayer;
     mapping(address => uint256) public lastRound;
 
+    event ContributionPeriodStarted(uint256 count, uint32 startTime);
+    event PlayerDeposited(uint256 count, uint256 amount, address player);
     event ContributionPeriodFinished(bool state);
     event fightWon(bool state);
 
@@ -36,16 +44,17 @@ contract bossGame is Ownable {
         require(MAX_PLAYERS >= playersCount, "Max players amount reached");
         require(
             msg.value >= _minDeposit &&
-                playerDeposit[msg.sender] + msg.value <= _maxDeposit,
+                playerDeposit[count][msg.sender] + msg.value <= _maxDeposit,
             "Unsupported deposit amount"
         );
         if ((block.timestamp - startTime) < 3600) {
-            if (!isPlayer[msg.sender]) {
-                isPlayer[msg.sender] = true;
+            if (!isPlayer[count][msg.sender]) {
+                isPlayer[count][msg.sender] = true;
                 players.push(msg.sender);
                 playersCount++;
             }
-            playerDeposit[msg.sender] += msg.value;
+            playerDeposit[count][msg.sender] += msg.value;
+            emit PlayerDeposited(count, msg.sender, msg.value);
         } else {
             contributionPeriodOn = false;
             emit ContributionPeriodFinished(true);
@@ -53,10 +62,15 @@ contract bossGame is Ownable {
         }
     }
 
-    function claimWin() public {
-        require(bossDefeated == true,"You didn't beat the boss ser");
-        require(lastRound[msg.sender] < round_id, "Already claimed");
-        lastRound[msg.sender] = round_id;
+    function claimWin(uint id) public {
+        if (id) {
+            BossFight storage bossFight = bossFights[id];
+        } else {
+            BossFight storage bossFight = bossFights[count];
+        }
+        require(bossDefeated == true, "You lost the round");
+        require(lastRound[msg.sender] < bossFight.round_id, "Already claimed");
+        lastRound[msg.sender] = bossFight.round_id;
         uint256 amount = calculatePlayerShare(msg.sender);
         (bool success, ) = msg.sender.call{value: amount}("");
         require(success, "Failed to send rewards");
@@ -64,31 +78,42 @@ contract bossGame is Ownable {
 
     // owner
     function startContributionPeriod() public onlyOwner {
+        require(contributionPeriodOn == false, "Period already started");
         contributionPeriodOn = true;
-        startTime = block.timestamp;
-        round_id++;
+        count += 1;
+        bossFights[count] = BossFight({
+            round_id: count,
+            startTime: block.timestamp,
+            totalcontributed: 0,
+            bossDefeated: false,
+            victoryReward: 0
+        });
+        emit ContributionPeriodStarted(count, block.timestamp);
     }
 
     // internal
 
     function startFight() internal {
+        BossFight storage bossFight = bossFights[count];
         require(contributionPeriodOn == false);
         for (uint256 i = 0; i < players.length; i++) {
-            address p = players[i];
-            _totalcontributed += playerDeposit[p];
+            bossFight.totalcontributed += playerDeposit[count][players[i]];
         }
         //to bechanged
-        uint256 bossHp = _totalcontributed**(1 + (randMod() / 10));
-        uint256 totalDmg = _totalcontributed**(1 + (randMod() / 10));
+        uint256 bossHp = bossFight.totalcontributed**(1 + (randMod() / 10));
+        uint256 totalDmg = bossFight.totalcontributed**(1 + (randMod() / 10));
         if (totalDmg >= bossHp) {
             bossDefeated = true;
             emit fightWon(true);
             reset();
         } else {
-            //refund
+            //refund (to be changed too)
             bossDefeated = false;
+            uint amount =  bossFight.totalcontributed;
             emit fightWon(false);
-            payable(players[i]).transfer(_totalcontributed);
+            for (uint256 i = 0; i < players.length; i++) {
+            payable(players[i]).transfer(amount);
+        }
             reset();
         }
     }
@@ -97,14 +122,16 @@ contract bossGame is Ownable {
         internal
         returns (uint256)
     {
-        return (address(this).balance * 100) / playerDeposit[playerAddress];
+        return
+            (address(this).balance * 100) / playerDeposit[count][playerAddress];
     }
 
     function reset() internal {
+        contributionPeriodOn = false;
         for (uint256 i = 0; i < players.length; i++) {
             address p = players[i];
-            isPlayer[p] = false;
-            playerDeposit[p] = 0;
+            isPlayer[count][p] = false;
+            playerDeposit[count][p] = 0;
         }
         players = [];
         playersCount = 0;
@@ -134,7 +161,10 @@ contract bossGame is Ownable {
         view
         returns (bool, uint256)
     {
-        return (isPlayer[playerAddress], playerDeposit[playerAddress]);
+        return (
+            isPlayer[count][playerAddress],
+            playerDeposit[count][playerAddress]
+        );
     }
 
     receive() external payable {}
