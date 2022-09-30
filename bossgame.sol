@@ -62,13 +62,9 @@ contract bossGame is Ownable {
         }
     }
 
-    function claimWin(uint id) public {
-        if (id) {
-            BossFight storage bossFight = bossFights[id];
-        } else {
-            BossFight storage bossFight = bossFights[count];
-        }
-        require(bossDefeated == true, "You lost the round");
+    function claimWin() public {
+        BossFight storage bossFight = bossFights[count];
+        require(bossFight.bossDefeated == true, "You lost the round");
         require(lastRound[msg.sender] < bossFight.round_id, "Already claimed");
         lastRound[msg.sender] = bossFight.round_id;
         uint256 amount = calculatePlayerShare(msg.sender);
@@ -80,7 +76,6 @@ contract bossGame is Ownable {
     function startContributionPeriod() public onlyOwner {
         require(contributionPeriodOn == false, "Period already started");
         contributionPeriodOn = true;
-        count += 1;
         bossFights[count] = BossFight({
             round_id: count,
             startTime: block.timestamp,
@@ -112,7 +107,7 @@ contract bossGame is Ownable {
             uint amount =  bossFight.totalcontributed;
             emit fightWon(false);
             for (uint256 i = 0; i < players.length; i++) {
-            payable(players[i]).transfer(amount);
+            payable(players[i]).transfer((amount * 100 )/ playerDeposit[count][players[i]]);
         }
             reset();
         }
@@ -127,12 +122,8 @@ contract bossGame is Ownable {
     }
 
     function reset() internal {
+        count += 1;
         contributionPeriodOn = false;
-        for (uint256 i = 0; i < players.length; i++) {
-            address p = players[i];
-            isPlayer[count][p] = false;
-            playerDeposit[count][p] = 0;
-        }
         players = [];
         playersCount = 0;
     }
