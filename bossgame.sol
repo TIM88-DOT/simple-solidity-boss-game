@@ -10,11 +10,11 @@ contract bossGame is Ownable {
     address[] players;
 
     struct BossFight {
-        uint256 round_id;
+        uint32 round_id;
         uint32 startTime;
-        uint256 totalcontributed;
+        uint victoryReward;
+        uint totalcontributed;
         bool bossDefeated;
-        uint256 victoryReward;
     }
 
     uint256 public playersCount;
